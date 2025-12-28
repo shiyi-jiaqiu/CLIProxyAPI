@@ -21,8 +21,8 @@ type AntigravityModelQuota struct {
 // This is a best-effort in-memory snapshot for observability (it is not persisted).
 type AntigravityQuotaSnapshot struct {
 	Models    []AntigravityModelQuota `json:"models,omitempty"`
-	Forbidden bool                   `json:"forbidden,omitempty"`
-	UpdatedAt time.Time              `json:"updated_at"`
+	Forbidden bool                    `json:"forbidden,omitempty"`
+	UpdatedAt time.Time               `json:"updated_at"`
 }
 
 var antigravityQuotaByAuth sync.Map // authID -> AntigravityQuotaSnapshot
@@ -101,6 +101,15 @@ func UpdateAntigravityQuotaSnapshot(authID string, snapshot *AntigravityQuotaSna
 	antigravityQuotaByAuth.Store(authID, *snapshot)
 }
 
+// DeleteAntigravityQuotaSnapshot removes the cached snapshot for an authID (in-memory).
+// Primarily intended for tests to avoid shared global state across test cases.
+func DeleteAntigravityQuotaSnapshot(authID string) {
+	if authID == "" {
+		return
+	}
+	antigravityQuotaByAuth.Delete(authID)
+}
+
 // GetAntigravityQuotaSnapshot returns the most recent snapshot for an authID, if any.
 func GetAntigravityQuotaSnapshot(authID string) *AntigravityQuotaSnapshot {
 	if authID == "" {
@@ -114,4 +123,3 @@ func GetAntigravityQuotaSnapshot(authID string) *AntigravityQuotaSnapshot {
 	}
 	return nil
 }
-

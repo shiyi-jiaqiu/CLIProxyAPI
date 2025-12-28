@@ -12,6 +12,7 @@ import (
 
 	gin "github.com/gin-gonic/gin"
 	proxyconfig "github.com/router-for-me/CLIProxyAPI/v6/internal/config"
+	proxyusage "github.com/router-for-me/CLIProxyAPI/v6/internal/usage"
 	sdkaccess "github.com/router-for-me/CLIProxyAPI/v6/sdk/access"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
 	sdkconfig "github.com/router-for-me/CLIProxyAPI/v6/sdk/config"
@@ -76,6 +77,9 @@ func TestManagementRefreshAntigravityQuota(t *testing.T) {
 			"project_id":   "test-project",
 		},
 	})
+	t.Cleanup(func() {
+		proxyusage.DeleteAntigravityQuotaSnapshot("ag-1")
+	})
 
 	reqBody := []byte(`{"id":"ag-1"}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/management/auth-files/antigravity-quota", bytes.NewReader(reqBody))
@@ -97,8 +101,49 @@ func TestManagementRefreshAntigravityQuota(t *testing.T) {
 	if !ok || authObj == nil {
 		t.Fatalf("expected auth object, got: %#v", payload["auth"])
 	}
-	if authObj["antigravity_quota"] == nil {
-		t.Fatalf("expected antigravity_quota in response auth, got: %#v", authObj)
+	quotaObj, ok := authObj["antigravity_quota"].(map[string]any)
+	if !ok || quotaObj == nil {
+		t.Fatalf("expected antigravity_quota in response auth, got: %#v", authObj["antigravity_quota"])
+	}
+
+	models, ok := quotaObj["models"].([]any)
+	if !ok || len(models) != 2 {
+		t.Fatalf("expected models length=2, got %#v", quotaObj["models"])
+	}
+	asModel := func(idx int) map[string]any {
+		m, ok := models[idx].(map[string]any)
+		if !ok || m == nil {
+			t.Fatalf("expected model[%d] to be an object, got %#v", idx, models[idx])
+		}
+		return m
+	}
+
+	m0 := asModel(0)
+	m1 := asModel(1)
+	var gemini, claude map[string]any
+	if m0["name"] == "claude-sonnet-4-5" {
+		claude, gemini = m0, m1
+	} else {
+		gemini, claude = m0, m1
+	}
+
+	if gemini["name"] != "gemini-3-pro-high" {
+		t.Fatalf("expected gemini model name, got %#v", gemini["name"])
+	}
+	if gemini["remaining_percent"] != float64(73) {
+		t.Fatalf("expected gemini remaining_percent=73, got %#v", gemini["remaining_percent"])
+	}
+	if gemini["reset_time"] != "2025-01-01T00:00:00Z" {
+		t.Fatalf("expected gemini reset_time, got %#v", gemini["reset_time"])
+	}
+
+	if claude["name"] != "claude-sonnet-4-5" {
+		t.Fatalf("expected claude model name, got %#v", claude["name"])
+	}
+	if claude["remaining_percent"] != float64(12) {
+		t.Fatalf("expected claude remaining_percent=12, got %#v", claude["remaining_percent"])
+	}
+	if claude["reset_time"] != "2025-01-02T00:00:00Z" {
+		t.Fatalf("expected claude reset_time, got %#v", claude["reset_time"])
 	}
 }
-

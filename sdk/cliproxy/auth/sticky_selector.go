@@ -22,8 +22,8 @@ const stickySessionTTL = time.Hour
 var claudeSessionRegex = regexp.MustCompile(`session_([a-f0-9-]{36})`)
 
 type stickyBinding struct {
-	authID    string
-	expiresAt time.Time
+	authID     string
+	expiresAt  time.Time
 	lastUsedAt time.Time
 }
 
@@ -90,7 +90,10 @@ func authPriority(a *Auth) int {
 }
 
 func (s *StickySelector) gcLocked(now time.Time) {
-	if s == nil || len(s.bindings) == 0 {
+	if s == nil {
+		return
+	}
+	if len(s.bindings) == 0 {
 		s.lastGC = now
 		return
 	}
@@ -286,20 +289,17 @@ func (s *StickySelector) Pick(ctx context.Context, provider, model string, opts 
 		}
 	}
 
-	minPriority := defaultAuthPriority
+	minPriority := int(^uint(0) >> 1)
 	for _, candidate := range available {
 		p := authPriority(candidate)
 		if p < minPriority {
 			minPriority = p
 		}
 	}
-	filtered := available
-	if minPriority != defaultAuthPriority {
-		filtered = make([]*Auth, 0, len(available))
-		for _, candidate := range available {
-			if authPriority(candidate) == minPriority {
-				filtered = append(filtered, candidate)
-			}
+	filtered := make([]*Auth, 0, len(available))
+	for _, candidate := range available {
+		if authPriority(candidate) == minPriority {
+			filtered = append(filtered, candidate)
 		}
 	}
 

@@ -11,6 +11,7 @@ import (
 
 	gin "github.com/gin-gonic/gin"
 	proxyconfig "github.com/router-for-me/CLIProxyAPI/v6/internal/config"
+	proxyusage "github.com/router-for-me/CLIProxyAPI/v6/internal/usage"
 	sdkaccess "github.com/router-for-me/CLIProxyAPI/v6/sdk/access"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
 	sdkconfig "github.com/router-for-me/CLIProxyAPI/v6/sdk/config"
@@ -75,6 +76,10 @@ func TestManagementRefreshCodexQuota(t *testing.T) {
 			"access_token": "test-access-token",
 		},
 	})
+	t.Cleanup(func() {
+		// Avoid global shared state affecting other tests.
+		proxyusage.DeleteCodexQuotaSnapshot("codex-1")
+	})
 
 	reqBody := []byte(`{"id":"codex-1","model":"gpt-5.2"}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/management/auth-files/codex-quota", bytes.NewReader(reqBody))
@@ -96,8 +101,17 @@ func TestManagementRefreshCodexQuota(t *testing.T) {
 	if !ok || authObj == nil {
 		t.Fatalf("expected auth object, got: %#v", payload["auth"])
 	}
-	if authObj["codex_quota"] == nil {
-		t.Fatalf("expected codex_quota in response auth, got: %#v", authObj)
+	quotaObj, ok := authObj["codex_quota"].(map[string]any)
+	if !ok || quotaObj == nil {
+		t.Fatalf("expected codex_quota in response auth, got: %#v", authObj["codex_quota"])
+	}
+	if got := quotaObj["plan_type"]; got != "team" {
+		t.Fatalf("expected plan_type=team, got %#v", got)
+	}
+	if got := quotaObj["primary_used_percent"]; got != 12.5 {
+		t.Fatalf("expected primary_used_percent=12.5, got %#v", got)
+	}
+	if got := quotaObj["primary_reset_after_seconds"]; got != float64(123) {
+		t.Fatalf("expected primary_reset_after_seconds=123, got %#v", got)
 	}
 }
-

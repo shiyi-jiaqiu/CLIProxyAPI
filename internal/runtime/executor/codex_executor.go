@@ -83,6 +83,7 @@ func FetchCodexQuota(ctx context.Context, auth *cliproxyauth.Auth, cfg *config.C
 	if err != nil {
 		return nil, err
 	}
+	_, _ = io.Copy(io.Discard, httpResp.Body)
 	if errClose := httpResp.Body.Close(); errClose != nil {
 		log.Errorf("codex quota: close response body error: %v", errClose)
 	}
@@ -170,8 +171,12 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 	}
 
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
-		b, _ := io.ReadAll(httpResp.Body)
+		b, readErr := io.ReadAll(httpResp.Body)
 		appendAPIResponseChunk(ctx, e.cfg, b)
+		if readErr != nil {
+			recordAPIResponseError(ctx, e.cfg, readErr)
+			return resp, readErr
+		}
 		log.Debugf("request error, error status: %d, error body: %s", httpResp.StatusCode, summarizeErrorBody(httpResp.Header.Get("Content-Type"), b))
 		err = statusErr{code: httpResp.StatusCode, msg: string(b)}
 		return resp, err

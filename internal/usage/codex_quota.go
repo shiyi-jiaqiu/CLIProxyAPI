@@ -27,7 +27,7 @@ type CodexQuotaSnapshot struct {
 	CreditsBalance          *string `json:"credits_balance,omitempty"`
 	CreditsUnlimited        *bool   `json:"credits_unlimited,omitempty"`
 
-	UpdatedAt                  time.Time `json:"updated_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 var codexQuotaByAuth sync.Map // authID -> CodexQuotaSnapshot
@@ -154,6 +154,15 @@ func UpdateCodexQuotaSnapshot(authID string, snapshot *CodexQuotaSnapshot) {
 		return
 	}
 	codexQuotaByAuth.Store(authID, *snapshot)
+}
+
+// DeleteCodexQuotaSnapshot removes the cached snapshot for an authID (in-memory).
+// Primarily intended for tests to avoid shared global state across test cases.
+func DeleteCodexQuotaSnapshot(authID string) {
+	if authID == "" {
+		return
+	}
+	codexQuotaByAuth.Delete(authID)
 }
 
 // GetCodexQuotaSnapshot returns the most recent snapshot for an authID, if any.

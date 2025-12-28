@@ -28,6 +28,9 @@ func TestBuildAuthFileEntry_IncludesPriorityAndCodexQuota(t *testing.T) {
 	}
 
 	usage.UpdateCodexQuotaSnapshot("auth-1", &usage.CodexQuotaSnapshot{UpdatedAt: time.Now()})
+	t.Cleanup(func() {
+		usage.DeleteCodexQuotaSnapshot("auth-1")
+	})
 
 	entry := h.buildAuthFileEntry(auth)
 	if entry == nil {
@@ -55,6 +58,9 @@ func TestBuildAuthFileEntry_IncludesAntigravityQuota(t *testing.T) {
 	}
 
 	usage.UpdateAntigravityQuotaSnapshot("ag-1", &usage.AntigravityQuotaSnapshot{UpdatedAt: time.Now()})
+	t.Cleanup(func() {
+		usage.DeleteAntigravityQuotaSnapshot("ag-1")
+	})
 
 	entry := h.buildAuthFileEntry(auth)
 	if entry == nil {

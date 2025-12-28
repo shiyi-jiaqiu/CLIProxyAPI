@@ -4,8 +4,11 @@ FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
-ENV GOPROXY=https://goproxy.cn,direct
-ENV GOSUMDB=sum.golang.google.cn
+ARG GOPROXY=https://proxy.golang.org,direct
+ARG GOSUMDB=sum.golang.org
+
+ENV GOPROXY=$GOPROXY
+ENV GOSUMDB=$GOSUMDB
 
 COPY go.mod go.sum ./
 
@@ -22,9 +25,9 @@ ARG BUILD_DATE=unknown
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X 'main.Version=${VERSION}' -X 'main.Commit=${COMMIT}' -X 'main.BuildDate=${BUILD_DATE}'" -o ./CLIProxyAPI ./cmd/server/
 
-FROM golang:1.24-alpine
+FROM alpine:3.22.0
 
-RUN apk add --no-cache tzdata
+RUN apk add --no-cache ca-certificates tzdata
 
 RUN mkdir /CLIProxyAPI
 
