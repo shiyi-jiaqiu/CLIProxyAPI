@@ -204,10 +204,18 @@ func (b *Builder) Build() (*Service, error) {
 			strategy = strings.ToLower(strings.TrimSpace(b.cfg.Routing.Strategy))
 		}
 		var selector coreauth.Selector
-		switch strategy {
-		case "fill-first", "fillfirst", "ff":
-			selector = &coreauth.FillFirstSelector{}
-		default:
+		selectorFactories := map[string]func() coreauth.Selector{
+			"sticky":         func() coreauth.Selector { return &coreauth.StickySelector{} },
+			"sticky-session": func() coreauth.Selector { return &coreauth.StickySelector{} },
+			"stickysession":  func() coreauth.Selector { return &coreauth.StickySelector{} },
+			"ss":             func() coreauth.Selector { return &coreauth.StickySelector{} },
+			"fill-first":     func() coreauth.Selector { return &coreauth.FillFirstSelector{} },
+			"fillfirst":      func() coreauth.Selector { return &coreauth.FillFirstSelector{} },
+			"ff":             func() coreauth.Selector { return &coreauth.FillFirstSelector{} },
+		}
+		if factory, ok := selectorFactories[strategy]; ok {
+			selector = factory()
+		} else {
 			selector = &coreauth.RoundRobinSelector{}
 		}
 
