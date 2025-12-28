@@ -27,6 +27,8 @@ type AntigravityQuotaSnapshot struct {
 
 var antigravityQuotaByAuth sync.Map // authID -> AntigravityQuotaSnapshot
 
+var antigravityRelevantModelSubstrings = []string{"gemini", "claude"}
+
 // ParseAntigravityQuotaSnapshot parses fetchAvailableModels JSON response into a snapshot.
 // Returns nil when no relevant quotaInfo entries are present.
 func ParseAntigravityQuotaSnapshot(body []byte) *AntigravityQuotaSnapshot {
@@ -42,7 +44,14 @@ func ParseAntigravityQuotaSnapshot(body []byte) *AntigravityQuotaSnapshot {
 	out := &AntigravityQuotaSnapshot{}
 	for modelName, modelInfo := range models.Map() {
 		lower := strings.ToLower(modelName)
-		if !strings.Contains(lower, "gemini") && !strings.Contains(lower, "claude") {
+		relevant := false
+		for _, substr := range antigravityRelevantModelSubstrings {
+			if strings.Contains(lower, substr) {
+				relevant = true
+				break
+			}
+		}
+		if !relevant {
 			continue
 		}
 
