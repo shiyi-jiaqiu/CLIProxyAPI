@@ -303,7 +303,39 @@ func (s *StickySelector) Pick(ctx context.Context, provider, model string, opts 
 		}
 	}
 
-	selected := pickRendezvous(sessionKey, filtered)
+	// For new sessions, prefer the least-loaded auth (based on current active sticky bindings),
+	// then use rendezvous hashing as a deterministic tie-breaker.
+	loadByAuthID := make(map[string]int, len(filtered))
+	for k, binding := range s.bindings {
+		if !strings.HasPrefix(k, provider+":") {
+			continue
+		}
+		if binding.authID == "" || now.After(binding.expiresAt) {
+			continue
+		}
+		loadByAuthID[binding.authID]++
+	}
+
+	minLoad := int(^uint(0) >> 1)
+	for _, candidate := range filtered {
+		if candidate == nil || candidate.ID == "" {
+			continue
+		}
+		if load := loadByAuthID[candidate.ID]; load < minLoad {
+			minLoad = load
+		}
+	}
+	loadFiltered := make([]*Auth, 0, len(filtered))
+	for _, candidate := range filtered {
+		if candidate == nil || candidate.ID == "" {
+			continue
+		}
+		if loadByAuthID[candidate.ID] == minLoad {
+			loadFiltered = append(loadFiltered, candidate)
+		}
+	}
+
+	selected := pickRendezvous(sessionKey, loadFiltered)
 	if selected == nil {
 		s.mu.Unlock()
 		return nil, &Error{Code: "auth_not_found", Message: "no auth available"}
