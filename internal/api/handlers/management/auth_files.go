@@ -307,11 +307,6 @@ type authDisabledUpdateRequest struct {
 	Disabled bool   `json:"disabled"`
 }
 
-type antigravityQuotaRefreshRequest struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
 type codexQuotaRefreshRequest struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
@@ -462,93 +457,6 @@ func (h *Handler) PutAuthFilePriority(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"auth": h.buildAuthFileEntry(updated)})
-}
-
-// PostAuthFileAntigravityQuota refreshes (fetches) Antigravity model quota information for an auth file.
-//
-// JSON body:
-//   - id (preferred) or name
-func (h *Handler) PostAuthFileAntigravityQuota(c *gin.Context) {
-	if h == nil || c == nil {
-		return
-	}
-	if h.authManager == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "auth manager not available"})
-		return
-	}
-
-	var req antigravityQuotaRefreshRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json body"})
-		return
-	}
-	req.ID = strings.TrimSpace(req.ID)
-	req.Name = strings.TrimSpace(req.Name)
-	if req.ID == "" && req.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "id or name is required"})
-		return
-	}
-
-	authID := req.ID
-	if authID == "" {
-		for _, a := range h.authManager.List() {
-			if a == nil {
-				continue
-			}
-			if strings.EqualFold(strings.TrimSpace(a.FileName), req.Name) || strings.EqualFold(strings.TrimSpace(a.ID), req.Name) {
-				authID = a.ID
-				break
-			}
-		}
-	}
-	if authID == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "auth not found"})
-		return
-	}
-
-	auth, ok := h.authManager.GetByID(authID)
-	if !ok || auth == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "auth not found"})
-		return
-	}
-	if !strings.EqualFold(strings.TrimSpace(auth.Provider), "antigravity") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "auth is not antigravity"})
-		return
-	}
-
-	projectID := ""
-	if auth.Metadata != nil {
-		if pid, ok := auth.Metadata["project_id"].(string); ok {
-			projectID = strings.TrimSpace(pid)
-		}
-	}
-
-	snap, updatedAuth, err := runtimeexecutor.FetchAntigravityQuota(c.Request.Context(), auth, h.cfg, projectID)
-	if err != nil {
-		status := http.StatusBadGateway
-		if se, ok := err.(interface{ StatusCode() int }); ok && se != nil {
-			if code := se.StatusCode(); code > 0 {
-				status = code
-			}
-		}
-		c.JSON(status, gin.H{"error": err.Error()})
-		return
-	}
-
-	if updatedAuth != nil {
-		auth = updatedAuth
-		persisted, errUpdate := h.authManager.Update(c.Request.Context(), auth)
-		if errUpdate != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": errUpdate.Error()})
-			return
-		}
-		auth = persisted
-	}
-
-	if snap != nil {
-		usage.UpdateAntigravityQuotaSnapshot(auth.ID, snap)
-	}
-	c.JSON(http.StatusOK, gin.H{"auth": h.buildAuthFileEntry(auth)})
 }
 
 // PostAuthFileCodexQuota performs a minimal Codex request to fetch x-codex-* quota headers and cache them in memory.
@@ -740,11 +648,6 @@ func (h *Handler) buildAuthFileEntry(auth *coreauth.Auth) gin.H {
 	}
 	if snap := usage.GetCodexQuotaSnapshot(auth.ID); snap != nil {
 		entry["codex_quota"] = snap
-	}
-	if strings.EqualFold(strings.TrimSpace(auth.Provider), "antigravity") {
-		if snap := usage.GetAntigravityQuotaSnapshot(auth.ID); snap != nil {
-			entry["antigravity_quota"] = snap
-		}
 	}
 	if email := authEmail(auth); email != "" {
 		entry["email"] = email

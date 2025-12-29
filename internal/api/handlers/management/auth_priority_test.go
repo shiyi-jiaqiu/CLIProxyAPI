@@ -44,33 +44,6 @@ func TestBuildAuthFileEntry_IncludesPriorityAndCodexQuota(t *testing.T) {
 	}
 }
 
-func TestBuildAuthFileEntry_IncludesAntigravityQuota(t *testing.T) {
-	manager := coreauth.NewManager(nil, nil, nil)
-	cfg := &config.Config{Port: 8317}
-	h := NewHandler(cfg, "config.yaml", manager)
-
-	auth := &coreauth.Auth{
-		ID:       "ag-1",
-		Provider: "antigravity",
-		Attributes: map[string]string{
-			"path": "does-not-exist.json",
-		},
-	}
-
-	usage.UpdateAntigravityQuotaSnapshot("ag-1", &usage.AntigravityQuotaSnapshot{UpdatedAt: time.Now()})
-	t.Cleanup(func() {
-		usage.DeleteAntigravityQuotaSnapshot("ag-1")
-	})
-
-	entry := h.buildAuthFileEntry(auth)
-	if entry == nil {
-		t.Fatal("expected entry")
-	}
-	if entry["antigravity_quota"] == nil {
-		t.Fatalf("expected antigravity_quota to be present, got %#v", entry)
-	}
-}
-
 func TestBuildAuthFileEntry_IncludesQuotaState(t *testing.T) {
 	manager := coreauth.NewManager(nil, nil, nil)
 	cfg := &config.Config{Port: 8317}
