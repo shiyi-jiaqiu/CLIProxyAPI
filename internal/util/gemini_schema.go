@@ -371,8 +371,6 @@ func addEmptySchemaPlaceholder(jsonStr string) string {
 		propsPath := joinPath(parentPath, "properties")
 		propsVal := gjson.Get(jsonStr, propsPath)
 		reqPath := joinPath(parentPath, "required")
-		reqVal := gjson.Get(jsonStr, reqPath)
-		hasRequiredProperties := reqVal.IsArray() && len(reqVal.Array()) > 0
 
 		needsPlaceholder := false
 		if !propsVal.Exists() {
@@ -391,16 +389,6 @@ func addEmptySchemaPlaceholder(jsonStr string) string {
 
 			// Add to required array
 			jsonStr, _ = sjson.Set(jsonStr, reqPath, []string{"reason"})
-			continue
-		}
-
-		// If schema has properties but none are required, add a minimal placeholder.
-		if propsVal.IsObject() && !hasRequiredProperties {
-			placeholderPath := joinPath(propsPath, "_")
-			if !gjson.Get(jsonStr, placeholderPath).Exists() {
-				jsonStr, _ = sjson.Set(jsonStr, placeholderPath+".type", "boolean")
-			}
-			jsonStr, _ = sjson.Set(jsonStr, reqPath, []string{"_"})
 		}
 	}
 
