@@ -690,6 +690,51 @@ func TestCleanJSONSchemaForAntigravity_NonEmptySchemaUnchanged(t *testing.T) {
 	}
 }
 
+func TestCleanJSONSchemaForAntigravity_TopLevelNoRequiredUnchanged(t *testing.T) {
+	// Top-level schema without required should not get a placeholder.
+	input := `{
+		"type": "object",
+		"properties": {
+			"name": {"type": "string"}
+		}
+	}`
+
+	result := CleanJSONSchemaForAntigravity(input)
+
+	if strings.Contains(result, `"required"`) {
+		t.Errorf("Top-level schema should not get required placeholder, got: %s", result)
+	}
+	if strings.Contains(result, `"_":`) {
+		t.Errorf("Top-level schema should not get '_' placeholder property, got: %s", result)
+	}
+}
+
+func TestCleanJSONSchemaForAntigravity_NestedNoRequiredGetsPlaceholder(t *testing.T) {
+	// Nested object schema without required should get a minimal placeholder.
+	input := `{
+		"type": "object",
+		"properties": {
+			"nested": {
+				"type": "object",
+				"properties": {
+					"foo": {"type": "string"}
+				}
+			}
+		}
+	}`
+
+	result := CleanJSONSchemaForAntigravity(input)
+
+	parsed := gjson.Parse(result)
+	nestedReq := parsed.Get("properties.nested.required")
+	if !nestedReq.Exists() || !nestedReq.IsArray() || len(nestedReq.Array()) != 1 || nestedReq.Array()[0].String() != "_" {
+		t.Errorf("Nested schema should have required ['_'] placeholder, got: %s", result)
+	}
+	if !parsed.Get("properties.nested.properties._").Exists() {
+		t.Errorf("Nested schema should have '_' placeholder property, got: %s", result)
+	}
+}
+
 func TestCleanJSONSchemaForAntigravity_NestedEmptySchema(t *testing.T) {
 	// Nested empty object in items should also get placeholder
 	input := `{

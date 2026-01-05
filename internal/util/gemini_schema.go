@@ -393,7 +393,7 @@ func addEmptySchemaPlaceholder(jsonStr string) string {
 		}
 
 		// If schema has properties but none are required, add a minimal placeholder.
-		if propsVal.IsObject() && !hasRequiredProperties {
+		if propsVal.IsObject() && !hasRequiredProperties(jsonStr, parentPath) {
 			// DO NOT add placeholder if it's a top-level schema (parentPath is empty)
 			// or if we've already added a placeholder reason above.
 			if parentPath == "" {
@@ -411,6 +411,15 @@ func addEmptySchemaPlaceholder(jsonStr string) string {
 }
 
 // --- Helpers ---
+
+func hasRequiredProperties(jsonStr, parentPath string) bool {
+	reqPath := joinPath(parentPath, "required")
+	reqVal := gjson.Get(jsonStr, reqPath)
+	if !reqVal.IsArray() {
+		return false
+	}
+	return len(reqVal.Array()) > 0
+}
 
 func findPaths(jsonStr, field string) []string {
 	var paths []string

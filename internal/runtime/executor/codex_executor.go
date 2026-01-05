@@ -67,7 +67,7 @@ func FetchCodexQuota(ctx context.Context, auth *cliproxyauth.Auth, cfg *config.C
 	if errValidate := ValidateThinkingConfig(body, upstreamModel); errValidate != nil {
 		return nil, errValidate
 	}
-	body = applyPayloadConfig(cfg, upstreamModel, body)
+	body = applyPayloadConfigWithRoot(cfg, upstreamModel, "codex", "", body, nil)
 	body, _ = sjson.SetBytes(body, "model", upstreamModel)
 	body, _ = sjson.DeleteBytes(body, "previous_response_id")
 
