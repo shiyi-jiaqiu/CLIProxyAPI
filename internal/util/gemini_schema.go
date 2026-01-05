@@ -389,6 +389,21 @@ func addEmptySchemaPlaceholder(jsonStr string) string {
 
 			// Add to required array
 			jsonStr, _ = sjson.Set(jsonStr, reqPath, []string{"reason"})
+			continue
+		}
+
+		// If schema has properties but none are required, add a minimal placeholder.
+		if propsVal.IsObject() && !hasRequiredProperties {
+			// DO NOT add placeholder if it's a top-level schema (parentPath is empty)
+			// or if we've already added a placeholder reason above.
+			if parentPath == "" {
+				continue
+			}
+			placeholderPath := joinPath(propsPath, "_")
+			if !gjson.Get(jsonStr, placeholderPath).Exists() {
+				jsonStr, _ = sjson.Set(jsonStr, placeholderPath+".type", "boolean")
+			}
+			jsonStr, _ = sjson.Set(jsonStr, reqPath, []string{"_"})
 		}
 	}
 
