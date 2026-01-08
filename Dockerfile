@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-
 FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
@@ -25,9 +23,9 @@ ARG BUILD_DATE=unknown
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X 'main.Version=${VERSION}' -X 'main.Commit=${COMMIT}' -X 'main.BuildDate=${BUILD_DATE}'" -o ./CLIProxyAPI ./cmd/server/
 
-FROM alpine:3.22.0
+FROM golang:1.24-alpine
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache tzdata
 
 RUN mkdir /CLIProxyAPI
 
