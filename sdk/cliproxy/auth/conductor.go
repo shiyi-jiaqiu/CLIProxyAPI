@@ -42,7 +42,7 @@ type RefreshEvaluator interface {
 const (
 	refreshCheckInterval  = 5 * time.Second
 	refreshPendingBackoff = time.Minute
-	refreshFailureBackoff = 5 * time.Minute
+	refreshFailureBackoff = 1 * time.Minute
 	quotaBackoffBase      = time.Second
 	quotaBackoffMax       = 30 * time.Minute
 )
@@ -1546,7 +1546,9 @@ func (m *Manager) refreshAuth(ctx context.Context, id string) {
 		updated.Runtime = auth.Runtime
 	}
 	updated.LastRefreshedAt = now
-	updated.NextRefreshAfter = time.Time{}
+	// Preserve NextRefreshAfter set by the Authenticator
+	// If the Authenticator set a reasonable refresh time, it should not be overwritten
+	// If the Authenticator did not set it (zero value), shouldRefresh will use default logic
 	updated.LastError = nil
 	updated.UpdatedAt = now
 	_, _ = m.Update(ctx, updated)
@@ -1620,7 +1622,6 @@ func formatOauthIdentity(auth *Auth, provider string, accountInfo string) string
 	if auth == nil {
 		return ""
 	}
-	authIndex := auth.EnsureIndex()
 	// Prefer the auth's provider when available.
 	providerName := strings.TrimSpace(auth.Provider)
 	if providerName == "" {
@@ -1642,16 +1643,10 @@ func formatOauthIdentity(auth *Auth, provider string, accountInfo string) string
 	if authFile != "" {
 		parts = append(parts, "auth_file="+authFile)
 	}
-	if authIndex != "" {
-		parts = append(parts, "auth_index="+authIndex)
-	}
 	if len(parts) == 0 {
 		return accountInfo
 	}
-	if accountInfo == "" {
-		return strings.Join(parts, " ")
-	}
-	return strings.Join(parts, " ") + " account=" + strconv.Quote(accountInfo)
+	return strings.Join(parts, " ")
 }
 
 // InjectCredentials delegates per-provider HTTP request preparation when supported.
