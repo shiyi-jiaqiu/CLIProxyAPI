@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	copilotauth "github.com/router-for-me/CLIProxyAPI/v6/internal/auth/copilot"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v6/sdk/translator"
@@ -65,6 +66,30 @@ func (e *GitHubCopilotExecutor) Identifier() string { return githubCopilotAuthTy
 // PrepareRequest implements ProviderExecutor.
 func (e *GitHubCopilotExecutor) PrepareRequest(_ *http.Request, _ *cliproxyauth.Auth) error {
 	return nil
+}
+
+// HttpRequest injects GitHub Copilot credentials into the request and executes it.
+func (e *GitHubCopilotExecutor) HttpRequest(ctx context.Context, auth *cliproxyauth.Auth, req *http.Request) (*http.Response, error) {
+	if req == nil {
+		return nil, fmt.Errorf("github copilot executor: request is nil")
+	}
+	if ctx == nil {
+		ctx = req.Context()
+	}
+	httpReq := req.WithContext(ctx)
+	if err := e.PrepareRequest(httpReq, auth); err != nil {
+		return nil, err
+	}
+	apiToken, err := e.ensureAPIToken(ctx, auth)
+	if err != nil {
+		return nil, err
+	}
+	e.applyHeaders(httpReq, apiToken)
+	if auth != nil {
+		util.ApplyCustomHeadersFromAttrs(httpReq, auth.Attributes)
+	}
+	httpClient := newProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
+	return httpClient.Do(httpReq)
 }
 
 // Execute handles non-streaming requests to GitHub Copilot.

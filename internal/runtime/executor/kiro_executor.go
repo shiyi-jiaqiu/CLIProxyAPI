@@ -28,7 +28,6 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/usage"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v6/sdk/translator"
 	log "github.com/sirupsen/logrus"
-
 )
 
 const (
@@ -219,6 +218,32 @@ func (e *KiroExecutor) Identifier() string { return "kiro" }
 
 // PrepareRequest prepares the HTTP request before execution.
 func (e *KiroExecutor) PrepareRequest(_ *http.Request, _ *cliproxyauth.Auth) error { return nil }
+
+// HttpRequest injects Kiro credentials into the request and executes it.
+func (e *KiroExecutor) HttpRequest(ctx context.Context, auth *cliproxyauth.Auth, req *http.Request) (*http.Response, error) {
+	if req == nil {
+		return nil, fmt.Errorf("kiro executor: request is nil")
+	}
+	if ctx == nil {
+		ctx = req.Context()
+	}
+	httpReq := req.WithContext(ctx)
+	if err := e.PrepareRequest(httpReq, auth); err != nil {
+		return nil, err
+	}
+	accessToken, _ := kiroCredentials(auth)
+	if strings.TrimSpace(accessToken) == "" {
+		return nil, fmt.Errorf("kiro: access token not found in auth")
+	}
+	if strings.TrimSpace(httpReq.Header.Get("Authorization")) == "" {
+		httpReq.Header.Set("Authorization", "Bearer "+accessToken)
+	}
+	if auth != nil {
+		util.ApplyCustomHeadersFromAttrs(httpReq, auth.Attributes)
+	}
+	httpClient := newProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
+	return httpClient.Do(httpReq)
+}
 
 // Execute sends the request to Kiro API and returns the response.
 // Supports automatic token refresh on 401/403 errors.
@@ -1004,7 +1029,7 @@ func findRealThinkingEndTag(content string, alreadyInCodeBlock, alreadyInInlineC
 		discussionPatterns := []string{
 			"标签", "返回", "输出", "包含", "使用", "解析", "转换", "生成", // Chinese
 			"tag", "return", "output", "contain", "use", "parse", "emit", "convert", "generate", // English
-			"<thinking>", // discussing both tags together
+			"<thinking>",    // discussing both tags together
 			"`</thinking>`", // explicitly in inline code
 		}
 		isDiscussion := false
@@ -1852,7 +1877,6 @@ func (e *KiroExecutor) extractEventTypeFromBytes(headers []byte) string {
 	return ""
 }
 
-
 // NOTE: Response building functions moved to internal/translator/kiro/claude/kiro_claude_response.go
 // The executor now uses kiroclaude.BuildClaudeResponse() and kiroclaude.ExtractThinkingFromContent() instead
 
@@ -1889,18 +1913,18 @@ func (e *KiroExecutor) streamToChannel(ctx context.Context, body io.Reader, out 
 	var lastReportedOutputTokens int64   // Last reported output token count
 
 	// Upstream usage tracking - Kiro API returns credit usage and context percentage
-	var upstreamCreditUsage float64        // Credit usage from upstream (e.g., 1.458)
-	var upstreamContextPercentage float64  // Context usage percentage from upstream (e.g., 78.56)
-	var hasUpstreamUsage bool              // Whether we received usage from upstream
+	var upstreamCreditUsage float64       // Credit usage from upstream (e.g., 1.458)
+	var upstreamContextPercentage float64 // Context usage percentage from upstream (e.g., 78.56)
+	var hasUpstreamUsage bool             // Whether we received usage from upstream
 
 	// Translator param for maintaining tool call state across streaming events
 	// IMPORTANT: This must persist across all TranslateStream calls
 	var translatorParam any
 
 	// Thinking mode state tracking - tag-based parsing for <thinking> tags in content
-	inThinkBlock := false       // Whether we're currently inside a <thinking> block
-	isThinkingBlockOpen := false // Track if thinking content block SSE event is open
-	thinkingBlockIndex := -1     // Index of the thinking content block
+	inThinkBlock := false                          // Whether we're currently inside a <thinking> block
+	isThinkingBlockOpen := false                   // Track if thinking content block SSE event is open
+	thinkingBlockIndex := -1                       // Index of the thinking content block
 	var accumulatedThinkingContent strings.Builder // Accumulate thinking content for token counting
 
 	// Buffer for handling partial tag matches at chunk boundaries
@@ -2319,16 +2343,16 @@ func (e *KiroExecutor) streamToChannel(ctx context.Context, body io.Reader, out 
 
 					lastUsageUpdateLen = accumulatedContent.Len()
 					lastUsageUpdateTime = time.Now()
-					}
+				}
 
-					// TAG-BASED THINKING PARSING: Parse <thinking> tags from content
-					// Combine pending content with new content for processing
-					pendingContent.WriteString(contentDelta)
-					processContent := pendingContent.String()
-					pendingContent.Reset()
+				// TAG-BASED THINKING PARSING: Parse <thinking> tags from content
+				// Combine pending content with new content for processing
+				pendingContent.WriteString(contentDelta)
+				processContent := pendingContent.String()
+				pendingContent.Reset()
 
-					// Process content looking for thinking tags
-					for len(processContent) > 0 {
+				// Process content looking for thinking tags
+				for len(processContent) > 0 {
 					if inThinkBlock {
 						// We're inside a thinking block, look for </thinking>
 						endIdx := strings.Index(processContent, kirocommon.ThinkingEndTag)
@@ -2503,7 +2527,7 @@ func (e *KiroExecutor) streamToChannel(ctx context.Context, body io.Reader, out 
 							processContent = ""
 						}
 					}
-					}
+				}
 			}
 
 			// Handle tool uses in response (with deduplication)
@@ -2927,7 +2951,7 @@ func (e *KiroExecutor) streamToChannel(ctx context.Context, body io.Reader, out 
 		// Calculate input tokens from context percentage
 		// Using 200k as the base since that's what Kiro reports against
 		calculatedInputTokens := int64(upstreamContextPercentage * 200000 / 100)
-		
+
 		// Only use calculated value if it's significantly different from local estimate
 		// This provides more accurate token counts based on upstream data
 		if calculatedInputTokens > 0 {
