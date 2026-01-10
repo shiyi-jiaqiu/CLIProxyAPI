@@ -165,9 +165,9 @@ func (o *KiroOAuth) LoginWithBuilderID(ctx context.Context) (*KiroTokenData, err
 
 // LoginWithBuilderIDAuthCode performs OAuth login with AWS Builder ID using authorization code flow.
 // This provides a better UX than device code flow as it uses automatic browser callback.
-func (o *KiroOAuth) LoginWithBuilderIDAuthCode(ctx context.Context) (*KiroTokenData, error) {
+func (o *KiroOAuth) LoginWithBuilderIDAuthCode(ctx context.Context, opts *InteractiveLoginOptions) (*KiroTokenData, error) {
 	ssoClient := NewSSOOIDCClient(o.cfg)
-	return ssoClient.LoginWithBuilderIDAuthCode(ctx)
+	return ssoClient.LoginWithBuilderIDAuthCode(ctx, opts)
 }
 
 // exchangeCodeForToken exchanges the authorization code for tokens.
@@ -290,14 +290,14 @@ func (o *KiroOAuth) RefreshToken(ctx context.Context, refreshToken string) (*Kir
 
 // LoginWithGoogle performs OAuth login with Google using Kiro's social auth.
 // This uses a custom protocol handler (kiro://) to receive the callback.
-func (o *KiroOAuth) LoginWithGoogle(ctx context.Context) (*KiroTokenData, error) {
+func (o *KiroOAuth) LoginWithGoogle(ctx context.Context, opts *InteractiveLoginOptions) (*KiroTokenData, error) {
 	socialClient := NewSocialAuthClient(o.cfg)
-	return socialClient.LoginWithGoogle(ctx)
+	return socialClient.LoginWithSocial(ctx, ProviderGoogle, opts)
 }
 
 // LoginWithGitHub performs OAuth login with GitHub using Kiro's social auth.
 // This uses a custom protocol handler (kiro://) to receive the callback.
-func (o *KiroOAuth) LoginWithGitHub(ctx context.Context) (*KiroTokenData, error) {
+func (o *KiroOAuth) LoginWithGitHub(ctx context.Context, opts *InteractiveLoginOptions) (*KiroTokenData, error) {
 	socialClient := NewSocialAuthClient(o.cfg)
-	return socialClient.LoginWithGitHub(ctx)
+	return socialClient.LoginWithSocial(ctx, ProviderGitHub, opts)
 }

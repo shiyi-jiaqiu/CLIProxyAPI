@@ -161,7 +161,14 @@ func (a *KiroAuthenticator) LoginWithAuthCode(ctx context.Context, cfg *config.C
 	oauth := kiroauth.NewKiroOAuth(cfg)
 
 	// Use AWS Builder ID authorization code flow
-	tokenData, err := oauth.LoginWithBuilderIDAuthCode(ctx)
+	var interactiveOpts *kiroauth.InteractiveLoginOptions
+	if opts != nil {
+		interactiveOpts = &kiroauth.InteractiveLoginOptions{
+			NoBrowser: opts.NoBrowser,
+			Prompt:    opts.Prompt,
+		}
+	}
+	tokenData, err := oauth.LoginWithBuilderIDAuthCode(ctx, interactiveOpts)
 	if err != nil {
 		return nil, fmt.Errorf("login failed: %w", err)
 	}
@@ -225,8 +232,15 @@ func (a *KiroAuthenticator) LoginWithGoogle(ctx context.Context, cfg *config.Con
 
 	oauth := kiroauth.NewKiroOAuth(cfg)
 
-	// Use Google OAuth flow with protocol handler
-	tokenData, err := oauth.LoginWithGoogle(ctx)
+	// Use Google OAuth flow with protocol handler.
+	var interactiveOpts *kiroauth.InteractiveLoginOptions
+	if opts != nil {
+		interactiveOpts = &kiroauth.InteractiveLoginOptions{
+			NoBrowser: opts.NoBrowser,
+			Prompt:    opts.Prompt,
+		}
+	}
+	tokenData, err := oauth.LoginWithGoogle(ctx, interactiveOpts)
 	if err != nil {
 		return nil, fmt.Errorf("google login failed: %w", err)
 	}
@@ -288,8 +302,15 @@ func (a *KiroAuthenticator) LoginWithGitHub(ctx context.Context, cfg *config.Con
 
 	oauth := kiroauth.NewKiroOAuth(cfg)
 
-	// Use GitHub OAuth flow with protocol handler
-	tokenData, err := oauth.LoginWithGitHub(ctx)
+	// Use GitHub OAuth flow with protocol handler.
+	var interactiveOpts *kiroauth.InteractiveLoginOptions
+	if opts != nil {
+		interactiveOpts = &kiroauth.InteractiveLoginOptions{
+			NoBrowser: opts.NoBrowser,
+			Prompt:    opts.Prompt,
+		}
+	}
+	tokenData, err := oauth.LoginWithGitHub(ctx, interactiveOpts)
 	if err != nil {
 		return nil, fmt.Errorf("github login failed: %w", err)
 	}
@@ -344,7 +365,27 @@ func (a *KiroAuthenticator) LoginWithGitHub(ctx context.Context, cfg *config.Con
 
 // ImportFromKiroIDE imports token from Kiro IDE's token file.
 func (a *KiroAuthenticator) ImportFromKiroIDE(ctx context.Context, cfg *config.Config) (*coreauth.Auth, error) {
-	tokenData, err := kiroauth.LoadKiroIDEToken()
+	var (
+		tokenData *kiroauth.KiroTokenData
+		err       error
+	)
+
+	if cfg != nil {
+		for _, entry := range cfg.KiroKey {
+			tokenFile := strings.TrimSpace(entry.TokenFile)
+			if tokenFile == "" {
+				continue
+			}
+			tokenData, err = kiroauth.LoadKiroTokenFromPath(tokenFile)
+			if err == nil && tokenData != nil {
+				break
+			}
+		}
+	}
+
+	if tokenData == nil {
+		tokenData, err = kiroauth.LoadKiroIDEToken()
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to load Kiro IDE token: %w", err)
 	}

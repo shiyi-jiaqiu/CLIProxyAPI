@@ -73,17 +73,17 @@ func (h *Handler) PostOAuthCallback(c *gin.Context) {
 		return
 	}
 
-	sessionProvider, sessionStatus, ok := GetOAuthSession(state)
+	sessionProvider, _, ok := GetOAuthSession(state)
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"status": "error", "error": "unknown or expired state"})
 		return
 	}
-	if sessionStatus != "" {
-		c.JSON(http.StatusConflict, gin.H{"status": "error", "error": "oauth flow is not pending"})
-		return
-	}
 	if !strings.EqualFold(sessionProvider, canonicalProvider) {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "error": "provider does not match state"})
+		return
+	}
+	if !IsOAuthSessionPending(state, canonicalProvider) {
+		c.JSON(http.StatusConflict, gin.H{"status": "error", "error": "oauth flow is not pending"})
 		return
 	}
 

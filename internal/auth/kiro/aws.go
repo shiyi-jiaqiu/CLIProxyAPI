@@ -87,6 +87,13 @@ const KiroIDETokenFile = ".aws/sso/cache/kiro-auth-token.json"
 
 // LoadKiroIDEToken loads token data from Kiro IDE's token file.
 func LoadKiroIDEToken() (*KiroTokenData, error) {
+	if override := strings.TrimSpace(os.Getenv("KIRO_TOKEN_FILE")); override != "" {
+		return LoadKiroTokenFromPath(override)
+	}
+	if override := strings.TrimSpace(os.Getenv("KIRO_IDE_TOKEN_FILE")); override != "" {
+		return LoadKiroTokenFromPath(override)
+	}
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get home directory: %w", err)
@@ -95,6 +102,19 @@ func LoadKiroIDEToken() (*KiroTokenData, error) {
 	tokenPath := filepath.Join(homeDir, KiroIDETokenFile)
 	data, err := os.ReadFile(tokenPath)
 	if err != nil {
+		// Best-effort: if running under WSL and Windows drive mounts are available, search C:\Users\*\.
+		// This only works if /mnt/c is visible inside the current environment (e.g. WSL host, or a container with /mnt/c mounted).
+		if wslUsersRoot := "/mnt/c/Users"; strings.HasPrefix(tokenPath, "/root/") || strings.HasPrefix(tokenPath, "/home/") {
+			if st, errStat := os.Stat(wslUsersRoot); errStat == nil && st != nil && st.IsDir() {
+				candidates, errFind := findWSLTokenFiles(wslUsersRoot)
+				if errFind == nil && len(candidates) == 1 {
+					return LoadKiroTokenFromPath(candidates[0])
+				}
+				if errFind == nil && len(candidates) > 1 {
+					return nil, fmt.Errorf("multiple Kiro IDE token files found under %s; set kiro.token-file in config or KIRO_TOKEN_FILE env var", wslUsersRoot)
+				}
+			}
+		}
 		return nil, fmt.Errorf("failed to read Kiro IDE token file (%s): %w", tokenPath, err)
 	}
 
@@ -113,6 +133,8 @@ func LoadKiroIDEToken() (*KiroTokenData, error) {
 // LoadKiroTokenFromPath loads token data from a custom path.
 // This supports multiple accounts by allowing different token files.
 func LoadKiroTokenFromPath(tokenPath string) (*KiroTokenData, error) {
+	tokenPath = normalizeWindowsPathToWSL(tokenPath)
+
 	// Expand ~ to home directory
 	if len(tokenPath) > 0 && tokenPath[0] == '~' {
 		homeDir, err := os.UserHomeDir()

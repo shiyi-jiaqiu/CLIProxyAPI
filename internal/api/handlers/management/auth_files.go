@@ -317,6 +317,11 @@ type codexQuotaRefreshRequest struct {
 	Model string `json:"model"`
 }
 
+type kiroQuotaRefreshRequest struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // PutAuthFileDisabled enables/disables an auth entry (file-backed or runtime-only).
 //
 // JSON body:
@@ -528,6 +533,70 @@ func (h *Handler) PostAuthFileCodexQuota(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"auth": h.buildAuthFileEntry(auth)})
 }
 
+// PostAuthFileKiroQuota performs a best-effort /getUsageLimits request to fetch Kiro IDE quota data
+// (CodeWhisperer usage limits) and cache them in memory.
+//
+// JSON body:
+//   - id (preferred) or name
+func (h *Handler) PostAuthFileKiroQuota(c *gin.Context) {
+	if h == nil || c == nil {
+		return
+	}
+	if h.authManager == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "auth manager not available"})
+		return
+	}
+
+	var req kiroQuotaRefreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json body"})
+		return
+	}
+	req.ID = strings.TrimSpace(req.ID)
+	req.Name = strings.TrimSpace(req.Name)
+	if req.ID == "" && req.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id or name is required"})
+		return
+	}
+
+	authID := req.ID
+	if authID == "" {
+		for _, a := range h.authManager.List() {
+			if a == nil {
+				continue
+			}
+			if strings.EqualFold(strings.TrimSpace(a.FileName), req.Name) || strings.EqualFold(strings.TrimSpace(a.ID), req.Name) {
+				authID = a.ID
+				break
+			}
+		}
+	}
+	if authID == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "auth not found"})
+		return
+	}
+
+	auth, ok := h.authManager.GetByID(authID)
+	if !ok || auth == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "auth not found"})
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(auth.Provider), "kiro") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "auth is not kiro"})
+		return
+	}
+
+	snap, err := runtimeexecutor.FetchKiroUsageLimits(c.Request.Context(), auth, h.cfg)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	if snap != nil {
+		usage.UpdateKiroUsageSnapshot(auth.ID, snap)
+	}
+	c.JSON(http.StatusOK, gin.H{"auth": h.buildAuthFileEntry(auth)})
+}
+
 // GetAuthFileModels returns the models supported by a specific auth file
 func (h *Handler) GetAuthFileModels(c *gin.Context) {
 	name := c.Query("name")
@@ -652,6 +721,9 @@ func (h *Handler) buildAuthFileEntry(auth *coreauth.Auth) gin.H {
 	}
 	if snap := usage.GetCodexQuotaSnapshot(auth.ID); snap != nil {
 		entry["codex_quota"] = snap
+	}
+	if snap := usage.GetKiroUsageSnapshot(auth.ID); snap != nil {
+		entry["kiro_usage"] = snap
 	}
 	if email := authEmail(auth); email != "" {
 		entry["email"] = email
@@ -836,6 +908,26 @@ func (h *Handler) UploadAuthFile(c *gin.Context) {
 			c.JSON(400, gin.H{"error": "file must be .json"})
 			return
 		}
+
+		if src, errOpen := file.Open(); errOpen == nil && src != nil {
+			data, errRead := io.ReadAll(io.LimitReader(src, 5<<20))
+			_ = src.Close()
+			if errRead == nil {
+				if record, ok, errConv := convertKiroIDETokenToAuthRecord(data); errConv != nil {
+					c.JSON(400, gin.H{"error": errConv.Error()})
+					return
+				} else if ok && record != nil {
+					savedPath, errSave := h.saveTokenRecord(ctx, record)
+					if errSave != nil {
+						c.JSON(500, gin.H{"error": fmt.Sprintf("failed to save imported kiro token: %v", errSave)})
+						return
+					}
+					c.JSON(200, gin.H{"status": "ok", "saved_path": savedPath})
+					return
+				}
+			}
+		}
+
 		dst := filepath.Join(h.cfg.AuthDir, name)
 		if !filepath.IsAbs(dst) {
 			if abs, errAbs := filepath.Abs(dst); errAbs == nil {
@@ -872,6 +964,20 @@ func (h *Handler) UploadAuthFile(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "failed to read body"})
 		return
 	}
+
+	if record, ok, errConv := convertKiroIDETokenToAuthRecord(data); errConv != nil {
+		c.JSON(400, gin.H{"error": errConv.Error()})
+		return
+	} else if ok && record != nil {
+		savedPath, errSave := h.saveTokenRecord(ctx, record)
+		if errSave != nil {
+			c.JSON(500, gin.H{"error": fmt.Sprintf("failed to save imported kiro token: %v", errSave)})
+			return
+		}
+		c.JSON(200, gin.H{"status": "ok", "saved_path": savedPath})
+		return
+	}
+
 	dst := filepath.Join(h.cfg.AuthDir, filepath.Base(name))
 	if !filepath.IsAbs(dst) {
 		if abs, errAbs := filepath.Abs(dst); errAbs == nil {

@@ -30,6 +30,9 @@ func DoKiroGoogleLogin(cfg *config.Config, options *LoginOptions) {
 	if options == nil {
 		options = &LoginOptions{}
 	}
+	if options.NoBrowser && options.Prompt == nil {
+		options.Prompt = defaultProjectPrompt()
+	}
 
 	// Note: Kiro defaults to incognito mode for multi-account support.
 	// Users can override with --no-incognito if they want to use existing browser sessions.
@@ -78,6 +81,9 @@ func DoKiroAWSLogin(cfg *config.Config, options *LoginOptions) {
 	if options == nil {
 		options = &LoginOptions{}
 	}
+	if options.NoBrowser && options.Prompt == nil {
+		options.Prompt = defaultProjectPrompt()
+	}
 
 	// Note: Kiro defaults to incognito mode for multi-account support.
 	// Users can override with --no-incognito if they want to use existing browser sessions.
@@ -125,6 +131,9 @@ func DoKiroAWSLogin(cfg *config.Config, options *LoginOptions) {
 func DoKiroAWSAuthCodeLogin(cfg *config.Config, options *LoginOptions) {
 	if options == nil {
 		options = &LoginOptions{}
+	}
+	if options.NoBrowser && options.Prompt == nil {
+		options.Prompt = defaultProjectPrompt()
 	}
 
 	// Note: Kiro defaults to incognito mode for multi-account support.

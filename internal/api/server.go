@@ -632,6 +632,7 @@ func (s *Server) registerManagementRoutes() {
 		mgmt.GET("/auth-files/session-bindings", s.mgmt.GetAuthFileSessionBindings)
 		mgmt.POST("/auth-files", s.mgmt.UploadAuthFile)
 			mgmt.POST("/auth-files/codex-quota", s.mgmt.PostAuthFileCodexQuota)
+			mgmt.POST("/auth-files/kiro-quota", s.mgmt.PostAuthFileKiroQuota)
 		mgmt.PUT("/auth-files/disabled", s.mgmt.PutAuthFileDisabled)
 		mgmt.PUT("/auth-files/priority", s.mgmt.PutAuthFilePriority)
 		mgmt.DELETE("/auth-files", s.mgmt.DeleteAuthFile)

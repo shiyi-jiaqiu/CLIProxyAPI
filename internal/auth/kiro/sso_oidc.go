@@ -1248,7 +1248,7 @@ func (c *SSOOIDCClient) CreateTokenWithAuthCode(ctx context.Context, clientID, c
 
 // LoginWithBuilderIDAuthCode performs the authorization code flow for AWS Builder ID.
 // This provides a better UX than device code flow as it uses automatic browser callback.
-func (c *SSOOIDCClient) LoginWithBuilderIDAuthCode(ctx context.Context) (*KiroTokenData, error) {
+func (c *SSOOIDCClient) LoginWithBuilderIDAuthCode(ctx context.Context, opts *InteractiveLoginOptions) (*KiroTokenData, error) {
 	fmt.Println("\n╔══════════════════════════════════════════════════════════╗")
 	fmt.Println("║     Kiro Authentication (AWS Builder ID - Auth Code)      ║")
 	fmt.Println("╚══════════════════════════════════════════════════════════╝")
@@ -1314,58 +1314,71 @@ func (c *SSOOIDCClient) LoginWithBuilderIDAuthCode(ctx context.Context) (*KiroTo
 
 	fmt.Println("\n  Waiting for authorization callback...")
 
-	// Step 6: Wait for callback
-	select {
-	case <-ctx.Done():
-		browser.CloseBrowser()
-		return nil, ctx.Err()
-	case <-time.After(10 * time.Minute):
-		browser.CloseBrowser()
-		return nil, fmt.Errorf("authorization timed out")
-	case result := <-resultChan:
-		if result.Error != "" {
-			browser.CloseBrowser()
-			return nil, fmt.Errorf("authorization failed: %s", result.Error)
-		}
-
-		fmt.Println("\n✓ Authorization received!")
-
-		// Close browser
-		if err := browser.CloseBrowser(); err != nil {
-			log.Debugf("Failed to close browser: %v", err)
-		}
-
-		// Step 7: Exchange code for tokens
-		fmt.Println("Exchanging code for tokens...")
-		tokenResp, err := c.CreateTokenWithAuthCode(ctx, regResp.ClientID, regResp.ClientSecret, result.Code, codeVerifier, redirectURI)
-		if err != nil {
-			return nil, fmt.Errorf("failed to exchange code for tokens: %w", err)
-		}
-
-		fmt.Println("\n✓ Authentication successful!")
-
-		// Step 8: Get profile ARN
-		fmt.Println("Fetching profile information...")
-		profileArn := c.fetchProfileArn(ctx, tokenResp.AccessToken)
-
-		// Fetch user email (tries CodeWhisperer API first, then userinfo endpoint, then JWT parsing)
-		email := FetchUserEmailWithFallback(ctx, c.cfg, tokenResp.AccessToken)
-		if email != "" {
-			fmt.Printf("  Logged in as: %s\n", email)
-		}
-
-		expiresAt := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
-
-		return &KiroTokenData{
-			AccessToken:  tokenResp.AccessToken,
-			RefreshToken: tokenResp.RefreshToken,
-			ProfileArn:   profileArn,
-			ExpiresAt:    expiresAt.Format(time.RFC3339),
-			AuthMethod:   "builder-id",
-			Provider:     "AWS",
-			ClientID:     regResp.ClientID,
-			ClientSecret: regResp.ClientSecret,
-			Email:        email,
-		}, nil
+	var promptFn func(string) (string, error)
+	if opts != nil && opts.NoBrowser && opts.Prompt != nil {
+		promptFn = opts.Prompt
 	}
+
+	cb, finalRedirectURI, err := waitForOAuthCallback(
+		ctx,
+		state,
+		redirectURI,
+		func(waitCtx context.Context) (*AuthCallback, error) {
+			select {
+			case <-waitCtx.Done():
+				return nil, waitCtx.Err()
+			case result := <-resultChan:
+				return &AuthCallback{Code: result.Code, State: result.State, Error: result.Error}, nil
+			}
+		},
+		promptFn,
+	)
+	if err != nil {
+		browser.CloseBrowser()
+		return nil, err
+	}
+	if cb.Error != "" {
+		browser.CloseBrowser()
+		return nil, fmt.Errorf("authorization failed: %s", cb.Error)
+	}
+
+	fmt.Println("\n✓ Authorization received!")
+
+	// Close browser
+	if err := browser.CloseBrowser(); err != nil {
+		log.Debugf("Failed to close browser: %v", err)
+	}
+
+	// Step 7: Exchange code for tokens
+	fmt.Println("Exchanging code for tokens...")
+	tokenResp, err := c.CreateTokenWithAuthCode(ctx, regResp.ClientID, regResp.ClientSecret, cb.Code, codeVerifier, finalRedirectURI)
+	if err != nil {
+		return nil, fmt.Errorf("failed to exchange code for tokens: %w", err)
+	}
+
+	fmt.Println("\n✓ Authentication successful!")
+
+	// Step 8: Get profile ARN
+	fmt.Println("Fetching profile information...")
+	profileArn := c.fetchProfileArn(ctx, tokenResp.AccessToken)
+
+	// Fetch user email (tries CodeWhisperer API first, then userinfo endpoint, then JWT parsing)
+	email := FetchUserEmailWithFallback(ctx, c.cfg, tokenResp.AccessToken)
+	if email != "" {
+		fmt.Printf("  Logged in as: %s\n", email)
+	}
+
+	expiresAt := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+
+	return &KiroTokenData{
+		AccessToken:  tokenResp.AccessToken,
+		RefreshToken: tokenResp.RefreshToken,
+		ProfileArn:   profileArn,
+		ExpiresAt:    expiresAt.Format(time.RFC3339),
+		AuthMethod:   "builder-id",
+		Provider:     "AWS",
+		ClientID:     regResp.ClientID,
+		ClientSecret: regResp.ClientSecret,
+		Email:        email,
+	}, nil
 }

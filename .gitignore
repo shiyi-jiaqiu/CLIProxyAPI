@@ -47,6 +47,10 @@ _bmad/*
 _bmad-output/*
 .mcp/cache/
 
+# Git worktrees
+.worktrees
+.worktrees/*
+
 # macOS
 .DS_Store
 ._*
