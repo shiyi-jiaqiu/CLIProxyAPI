@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,9 +27,8 @@ type stickyBinding struct {
 }
 
 const (
-	defaultAuthPriority = 50
-	stickyGCInterval    = 10 * time.Minute
-	stickyGCMinEntries  = 1024
+	stickyGCInterval   = 10 * time.Minute
+	stickyGCMinEntries = 1024
 )
 
 // StickySelector provides sticky-session routing using a session key extracted from
@@ -42,51 +40,6 @@ type StickySelector struct {
 	bindings map[string]stickyBinding
 	lastGC   time.Time
 	rr       RoundRobinSelector
-}
-
-func priorityFromAny(v any) (int, bool) {
-	switch val := v.(type) {
-	case int:
-		return val, true
-	case int64:
-		return int(val), true
-	case float64:
-		return int(val), true
-	case float32:
-		return int(val), true
-	case string:
-		val = strings.TrimSpace(val)
-		if val == "" {
-			return 0, false
-		}
-		if parsed, err := strconv.Atoi(val); err == nil {
-			return parsed, true
-		}
-		return 0, false
-	default:
-		return 0, false
-	}
-}
-
-func authPriority(a *Auth) int {
-	if a == nil {
-		return defaultAuthPriority
-	}
-	if a.Metadata != nil {
-		if v, ok := a.Metadata["priority"]; ok {
-			if p, ok2 := priorityFromAny(v); ok2 {
-				return p
-			}
-		}
-	}
-	if a.Attributes != nil {
-		if v := strings.TrimSpace(a.Attributes["priority"]); v != "" {
-			if p, err := strconv.Atoi(v); err == nil {
-				return p
-			}
-		}
-	}
-	return defaultAuthPriority
 }
 
 func (s *StickySelector) gcLocked(now time.Time) {
